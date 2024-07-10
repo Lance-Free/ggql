@@ -3,7 +3,7 @@ package ggql
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"github.com/samber/mo"
 	"github.com/tidwall/gjson"
 	"io"
 	"net/http"
@@ -11,7 +11,7 @@ import (
 
 // Request represents an HTTP request to a specific endpoint with optional headers.
 type Request struct {
-	Endpoint           string
+	Endpoint, Request  string
 	Headers, Variables map[string]string
 }
 
@@ -31,7 +31,10 @@ func (request Request) AddHeader(key, value string) Request {
 	return request
 }
 
-// AddHeaders appends the key-value pairs in the provided headers map to the Request's Headers map.
+// AddHeaders appends the key-value pairs in the provided headers map to the
+// Request's Headers map. It iterates over each key-value pair in the headers
+// map and adds it to the Headers map of the Request struct. The modified
+// Request is then returned.
 func (request Request) AddHeaders(headers map[string]string) Request {
 	for key, value := range headers {
 		request.Headers[key] = value
@@ -49,6 +52,8 @@ func (request Request) RemoveHeaders(keys ...string) Request {
 	return request
 }
 
+// ClearHeaders resets the Headers map in the Request struct by creating a new empty map.
+// It returns the updated Request.
 func (request Request) ClearHeaders() Request {
 	request.Headers = make(map[string]string)
 	return request
@@ -79,6 +84,8 @@ func (request Request) ClearVariables() Request {
 }
 
 // AddVariables appends the key-value pairs in the provided variables map to the Request's Variables map.
+// It iterates through the variables map and assigns each key-value pair to the corresponding key in the Request's Variables map.
+// The updated Request struct is then returned.
 func (request Request) AddVariables(variables map[string]string) Request {
 	for key, value := range variables {
 		request.Variables[key] = value
@@ -86,38 +93,52 @@ func (request Request) AddVariables(variables map[string]string) Request {
 	return request
 }
 
+// Query sets the query for the request. It updates the Request field of the
+// Request struct and returns the modified Request.
+func (request Request) Query(query string) Request {
+	request.Request = query
+	return request
+}
+
+// content represents the request payload for an HTTP request sent to a GraphQL endpoint.
+// It contains a query string and a map of variables.
 type content struct {
 	Query     string            `json:"query"`
 	Variables map[string]string `json:"variables"`
 }
 
-// Query sends a POST request to the specified endpoint with the provided query.
-// It returns the result of the query as a gjson.Result and any error encountered.
-// The request is created with a "Content-Type" header set to "application/json".
-// Any headers previously added to the Request object are also included in the request.
-// The response body is read into a buffer and parsed as a gjson.Result.
-// The response body is automatically closed once it has been read.
-func (request Request) Query(query string) (gjson.Result, error) {
+// Do sends an HTTP POST request to the specified endpoint with the query/mutation from the Request.
+// It encodes the request payload, sets the "Content-Type" header to "application/json",
+// sends the request, reads the response body, and returns the parsed response as a gjson.Result.
+// If the request is empty, it returns an error indicating that no query/mutation is provided.
+// If there is an error encoding the request payload, creating the request, sending the request,
+// or reading the response, it returns an error with the corresponding error message.
+// The response is always closed before returning.
+func (request Request) Do() mo.Result[gjson.Result] {
+	if request.Request == "" {
+		return mo.Errf[gjson.Result]("no query/mutation provided")
+	}
+
 	c := content{
-		Query:     query,
+		Query:     request.Request,
 		Variables: request.Variables,
 	}
 
 	var reqBuf bytes.Buffer
 	err := json.NewEncoder(&reqBuf).Encode(c)
 	if err != nil {
-		return gjson.Result{}, fmt.Errorf("encoding content: %w", err)
+		return mo.Errf[gjson.Result]("encoding request: %w", err)
 	}
 
 	req, err := http.NewRequest(http.MethodPost, request.Endpoint, &reqBuf)
 	if err != nil {
-		return gjson.Result{}, fmt.Errorf("creating request: %w", err)
+		return mo.Errf[gjson.Result]("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return gjson.Result{}, fmt.Errorf("sending request: %w", err)
+		return mo.Errf[gjson.Result]("sending request: %w", err)
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
@@ -126,8 +147,8 @@ func (request Request) Query(query string) (gjson.Result, error) {
 	var resBuf bytes.Buffer
 	_, err = resBuf.ReadFrom(res.Body)
 	if err != nil {
-		return gjson.Result{}, fmt.Errorf("reading response: %w", err)
+		return mo.Errf[gjson.Result]("reading response: %w", err)
 	}
 
-	return gjson.ParseBytes(resBuf.Bytes()), nil
+	return mo.Ok[gjson.Result](gjson.ParseBytes(resBuf.Bytes()))
 }
