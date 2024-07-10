@@ -11,8 +11,9 @@ import (
 
 // Request represents an HTTP request to a specific endpoint with optional headers.
 type Request struct {
-	Endpoint, Request  string
-	Headers, Variables map[string]string
+	Endpoint, Request string
+	Headers           map[string]string
+	Variables         map[string]any
 }
 
 // NewRequest initializes a new Request object with the specified endpoint and an empty header map.
@@ -20,7 +21,7 @@ func NewRequest(endpoint string) Request {
 	return Request{
 		Endpoint:  endpoint,
 		Headers:   make(map[string]string),
-		Variables: make(map[string]string),
+		Variables: make(map[string]any),
 	}
 }
 
@@ -61,7 +62,7 @@ func (request Request) ClearHeaders() Request {
 
 // AddVariable adds a variable to the request. It takes a key-value pair and updates the
 // Variables map in the Request struct. The updated Request is then returned.
-func (request Request) AddVariable(key, value string) Request {
+func (request Request) AddVariable(key string, value any) Request {
 	request.Variables[key] = value
 	return request
 }
@@ -79,14 +80,14 @@ func (request Request) RemoveVariables(keys ...string) Request {
 // ClearVariables clears the Variables map in the Request struct by creating
 // a new empty map. It returns the updated Request.
 func (request Request) ClearVariables() Request {
-	request.Variables = make(map[string]string)
+	request.Variables = make(map[string]any)
 	return request
 }
 
 // AddVariables appends the key-value pairs in the provided variables map to the Request's Variables map.
 // It iterates through the variables map and assigns each key-value pair to the corresponding key in the Request's Variables map.
 // The updated Request struct is then returned.
-func (request Request) AddVariables(variables map[string]string) Request {
+func (request Request) AddVariables(variables map[string]any) Request {
 	for key, value := range variables {
 		request.Variables[key] = value
 	}
@@ -103,8 +104,8 @@ func (request Request) Query(query string) Request {
 // content represents the request payload for an HTTP request sent to a GraphQL endpoint.
 // It contains a query string and a map of variables.
 type content struct {
-	Query     string            `json:"query"`
-	Variables map[string]string `json:"variables"`
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables"`
 }
 
 // Do sends an HTTP POST request to the specified endpoint with the query/mutation from the Request.
