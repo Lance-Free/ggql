@@ -136,6 +136,9 @@ func (request Request) Do() mo.Result[gjson.Result] {
 		return mo.Errf[gjson.Result]("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for key, value := range request.Headers {
+		req.Header.Set(key, value)
+	}
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
